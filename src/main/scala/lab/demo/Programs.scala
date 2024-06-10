@@ -81,12 +81,15 @@ class Main7 extends AggregateProgramSkeleton:
 object Demo7 extends Simulation[Main7]
 
 class Main8 extends AggregateProgramSkeleton:
-  override def main() = minHoodPlus(nbrRange)
+  override def main() =
+    //minHoodPlus(nbrRange)
+    minHoodPlus((nbrRange, nbr{mid}))._2
+
 
 object Demo8 extends Simulation[Main8]
 
 class Main9 extends AggregateProgramSkeleton:
-  override def main() = rep(0){_+1}
+  override def main() = branch(sense1)(rep(0){e => branch(e < 1000)(e+1)(e)})(0)
 
 object Demo9 extends Simulation[Main9]
 
@@ -103,31 +106,35 @@ object Demo11 extends Simulation[Main11]
 class Main12 extends AggregateProgramSkeleton:
   import Builtins.Bounded.of_i
 
-  override def main() = maxHoodPlus(boolToInt(nbr{sense1}))
+  override def main() =
+    foldhood(Set[ID]())((s, id) => s ++ id)(nbr{branch(sense1)(Set(mid()))(Set())})
 
 object Demo12 extends Simulation[Main12]
 
 class Main13 extends AggregateProgramSkeleton:
-  override def main() = foldhoodPlus(0)(_+_){nbr{1}}
+  override def main() = foldhoodPlus(0)(_+_){nbr{1}} //per ogni nodo mette il numero di vicini (mette 1 ad ogni vicino e poi somma gli 1 che ha messo)
 
 object Demo13 extends Simulation[Main13]
 
 class Main14 extends AggregateProgramSkeleton:
   import Builtins.Bounded.of_i
 
-  override def main() = rep(0){ x => boolToInt(sense1) max maxHoodPlus( nbr{x}) }
+  override def main() =
+    //rep(0){ x => boolToInt(sense1) max maxHoodPlus( nbr{x}) } //propaga il valore 1 a tutti i nodi collegati quando un sense1 è acceso
+    rep(0){ x => mid() max maxHoodPlus (nbr{ x max mid() })} //propaga il valore del nodo con id più alto, x in questo caso rappresenta l'id. Dentro nbr faccio il massimo tra l'id del nodo (x) e gli id dei vicini
 
 object Demo14 extends Simulation[Main14]
 
 class Main15 extends AggregateProgramSkeleton:
   override def main() = rep(Double.MaxValue):
-    d => mux[Double](sense1){0.0}{minHoodPlus(nbr{d}+1.0)}
+    d => mux[Double](sense1){0.0}{minHoodPlus(nbr{d}+1.0)} //per ogni nodo considera il valore di ogni vicino +1 e prende il minore. Quindi per ongi nodo si ottiene la distanza dalla sorgente (il nodo con sense1 acceso)
 
 object Demo15 extends Simulation[Main15]
 
 class Main16 extends AggregateProgramSkeleton:
   override def main() = rep(Double.MaxValue):
-    d => mux[Double](sense1){0.0}{minHoodPlus(nbr{d}+nbrRange)}
+    //d => mux[Double](sense1){0.0}{minHoodPlus(nbr{d}+nbrRange)}
+    d => mux[Double](sense1){0.0}{mux(sense2)(minHoodPlus(nbr{d}+nbrRange*5))(minHoodPlus(nbr{d}+nbrRange))}
 
 object Demo16 extends Simulation[Main16]
 
@@ -146,3 +153,36 @@ class Main19 extends AggregateProgramSkeleton with BlockT:
   override def main() =
     decay(10000, 0)(_ - 1)
 object Demo19 extends Simulation[Main19]
+
+class MainPartition extends AggregateProgramSkeleton:
+  import Builtins.Bounded.*
+
+  def partition(sourcesId: Set[Int]) = rep((Double.MaxValue, Int.MaxValue)):
+    d => mux[(Double, Int)](sourcesId.contains(mid)){(0.0, mid)}{minHoodPlus(nbr{d._1}+nbrRange, d._2 min nbr{d._2})}
+
+  override def main() = partition(Set(1,10))
+
+object Partition extends Simulation[MainPartition]
+
+class MainChannel extends AggregateProgramSkeleton:
+
+  def gradient(source: Boolean) = rep(Double.MaxValue):
+    d => mux[Double](source){0.0}{minHoodPlus(nbr{d}+nbrRange)}
+
+  def broadcast(source: Boolean, msg: Double) = rep((Double.MaxValue, Double.MaxValue)):
+    d => mux(source){(0.0, msg)}{minHoodPlus(nbr{d._1}+nbrRange, nbr{d._2})}
+
+  def distance(source: Boolean, destination:Boolean) =
+    broadcast(source, gradient(destination))
+
+  def dilate(region: Boolean, width: Double) =
+    gradient(region) < width
+
+  def channel(source: Boolean, destination: Boolean, width: Double) =
+    dilate(gradient(source) + gradient(destination) <= distance(source, destination)._2, width)
+
+  override def main() =
+    //distance(sense1, sense2)
+    channel(sense1, sense2, 100)
+
+object Channel extends Simulation[MainChannel]
